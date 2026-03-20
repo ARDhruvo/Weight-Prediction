@@ -1,15 +1,21 @@
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Ridge
 from statsmodels.tsa.arima.model import ARIMA
+from pmdarima import auto_arima
+from xgboost import XGBRegressor
 import matplotlib.pyplot as plt
+import seaborn as sns
 import os
 
-output_dir = "predictions"
-os.makedirs(output_dir, exist_ok=True)  # create if it doesn't exist
+# Future idea: Make it modular
 
-
-input_file = os.path.join(".", "data.csv")  # current directory / data.csv
+script_dir = os.path.dirname(__file__)
+input_file = os.path.join(script_dir, "data.csv")
+output_dir = os.path.join(script_dir, "predictions")
+os.makedirs(output_dir, exist_ok=True)
 df = pd.read_csv(input_file)
 
 # Graphing the data
@@ -27,7 +33,7 @@ plt.savefig(os.path.join(output_dir, "weight_plot.png"))
 
 df["lag1"] = df["weight"].shift(1)
 
-features = ["day", "burned", "cheat", "fasting", "lag1"]
+features = ["lag1", "day", "exercised", "cheat", "fasting", "week", "burned", "classes"]
 
 df["target"] = df["weight"].shift(-1)
 df = df.dropna()
@@ -36,99 +42,187 @@ df_train = df.copy()
 x = df[features]
 y = df["target"]
 
-fasting_days = list(range(12, 42))
-possible_cheat_days = [42, 43, 44, 45]
+
+# Extra stuffs
+
+pred_days = list(range(43, 50))
+
+possible_cheat_days = [42, 43, 44]
+
+week = 0
+
+original_df = pd.read_csv(input_file)
+
 
 # Linear regression model
 
 linear_predictions = []
 
-original_df = pd.read_csv(input_file)
-
-last_actual_weight = df[df["day"] == 32]["weight"].values[0]
+last_actual_weight = df[df["day"] == 41]["weight"].values[0]
 lag1 = last_actual_weight
 
-pred_days = list(range(33, 57))
 
 model_lr = LinearRegression()
 model_lr.fit(x, y)
 
+
 for i, day in enumerate(pred_days):
-    burned = 0
+    exercised = 0
+    burned = 80
     cheat = 1 if (day in possible_cheat_days) else 0
-    fasting = 1 if (day in fasting_days) else 0
-    features = np.array([[day, burned, cheat, fasting, lag1]])
+    fasting = 0
+    classes = 0
+    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
     pred_weight = model_lr.predict(features)[0]
     linear_predictions.append(pred_weight)
     lag1 = pred_weight
+    week += 1
+
+week = 0
 
 print("Linear Regression Predictions:")
 for i, pred in enumerate(linear_predictions):
     print(f"Day {pred_days[i]}: {pred:.2f}")
 
-# ARIMA model
 
-arima_whitenoise_predictions = []
-arima_randomwalk_predictions = []
-arima_autoregressive_predictions = []
-arima_suggested_predictions = []
+# Random Forest model
 
-arima_whitenoise_model = ARIMA(df["weight"], order=(0, 0, 0))
-arima_randomwalk_model = ARIMA(df["weight"], order=(0, 1, 0))
-arima_autoregressive_model = ARIMA(df["weight"], order=(1, 0, 0))
-arima_suggested_model = ARIMA(df["weight"], order=(5, 1, 0))
+randForest_predictions = []
 
-arima_whitenoise_fit = arima_whitenoise_model.fit()
-arima_randomwalk_fit = arima_randomwalk_model.fit()
-arima_autoregressive_fit = arima_autoregressive_model.fit()
-arima_suggested_fit = arima_suggested_model.fit()
+last_actual_weight = df[df["day"] == 41]["weight"].values[0]
+lag1 = last_actual_weight
 
-arima_whitenoise_forecast = arima_whitenoise_fit.get_forecast(steps=28)
-arima_randomwalk_forecast = arima_randomwalk_fit.get_forecast(steps=28)
-arima_autoregressive_forecast = arima_autoregressive_fit.get_forecast(steps=28)
-arima_suggested_forecast = arima_suggested_fit.get_forecast(steps=28)
-
-for d, pred in zip(pred_days, arima_whitenoise_forecast.predicted_mean):
-    arima_whitenoise_predictions.append(pred)
-
-for d, pred in zip(pred_days, arima_randomwalk_forecast.predicted_mean):
-    arima_randomwalk_predictions.append(pred)
-
-for d, pred in zip(pred_days, arima_autoregressive_forecast.predicted_mean):
-    arima_autoregressive_predictions.append(pred)
-
-for d, pred in zip(pred_days, arima_suggested_forecast.predicted_mean):
-    arima_suggested_predictions.append(pred)
-
-print("\nARIMA Predictions:")
-
-print("White Noise Model:")
-for i, pred in enumerate(arima_whitenoise_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-print("\nRandom Walk Model:")
-for i, pred in enumerate(arima_randomwalk_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-print("\nAutoregressive Model:")
-for i, pred in enumerate(arima_autoregressive_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-print("\nSuggested ARIMA Model:")
-for i, pred in enumerate(arima_suggested_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-
-results_df = pd.DataFrame(
-    {
-        "day": pred_days,
-        "linear_regression": linear_predictions,
-        "arima_whitenoise": arima_whitenoise_predictions,
-        "arima_randomwalk": arima_randomwalk_predictions,
-        "arima_autoregressive": arima_autoregressive_predictions,
-        "arima_suggested": arima_suggested_predictions,
-    }
+model_rf = RandomForestRegressor(
+    n_estimators=100, max_depth=20, min_samples_leaf=5, random_state=42
 )
+model_rf.fit(x, y)
+
+for i, day in enumerate(pred_days):
+    exercised = 0
+    burned = 80
+    cheat = 1 if (day in possible_cheat_days) else 0
+    fasting = 0
+    classes = 0
+    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
+    pred_weight = model_rf.predict(features)[0]
+    randForest_predictions.append(pred_weight)
+    lag1 = pred_weight
+    week += 1
+
+week = 0
+
+print("Random Forest Predictions:")
+for i, pred in enumerate(randForest_predictions):
+    print(f"Day {pred_days[i]}: {pred:.2f}")
+
+
+# Ridge Regression model
+
+ridge_predictions = []
+
+last_actual_weight = df[df["day"] == 41]["weight"].values[0]
+lag1 = last_actual_weight
+
+model_ridge = Ridge(alpha=1.0)
+model_ridge.fit(x, y)
+
+for i, day in enumerate(pred_days):
+    exercised = 0
+    burned = 80
+    cheat = 1 if (day in possible_cheat_days) else 0
+    fasting = 0
+    classes = 0
+    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
+    pred_weight = model_ridge.predict(features)[0]
+    ridge_predictions.append(pred_weight)
+    lag1 = pred_weight
+    week += 1
+
+week = 0
+
+print("Ridge Regression Predictions:")
+for i, pred in enumerate(ridge_predictions):
+    print(f"Day {pred_days[i]}: {pred:.2f}")
+
+# ARIMAX model
+
+arimax_predictions = []
+
+last_actual_weight = df[df["day"] == 41]["weight"].values[0]
+lag1 = last_actual_weight
+
+endog = df["weight"].values
+exog = df[["day", "exercised", "cheat", "fasting", "week", "burned", "classes"]].values
+
+moodel_arimax = auto_arima(
+    endog,
+    exogenous=exog,
+    start_p=0,
+    max_p=3,
+    start_q=0,
+    max_q=3,
+    d=None,
+    max_d=2,
+    seasonal=False,
+    stepwise=True,
+    trace=True,
+    suppress_warnings=True,
+    error_action="ignore",
+)
+
+for i, day in enumerate(pred_days):
+    exercised = 0
+    burned = 80
+    cheat = 1 if (day in possible_cheat_days) else 0
+    fasting = 0
+    classes = 0
+    features = np.array([[day, exercised, cheat, fasting, week, burned, classes]])
+    pred_weight = moodel_arimax.predict(n_periods=1, exogenous=features)[0]
+    arimax_predictions.append(pred_weight)
+    week += 1
+
+week = 0
+
+print("ARIMAX Predictions:")
+for i, pred in enumerate(arimax_predictions):
+    print(f"Day {pred_days[i]}: {pred:.2f}")
+
+# XGBoost model
+
+xgb_predictions = []
+
+last_actual_weight = df[df["day"] == 41]["weight"].values[0]
+lag1 = last_actual_weight
+
+model_xgb = XGBRegressor(
+    n_estimators=100, max_depth=5, learning_rate=0.1, random_state=42
+)
+model_xgb.fit(x, y)
+for i, day in enumerate(pred_days):
+    exercised = 0
+    burned = 80
+    cheat = 1 if (day in possible_cheat_days) else 0
+    fasting = 0
+    classes = 0
+    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
+    pred_weight = model_xgb.predict(features)[0]
+    xgb_predictions.append(pred_weight)
+    lag1 = pred_weight
+    week += 1
+
+week = 0
+
+print("XGBoost Predictions:")
+for i, pred in enumerate(xgb_predictions):
+    print(f"Day {pred_days[i]}: {pred:.2f}")
+
+# Saving Results
+
+results_df = pd.DataFrame({"day": pred_days, "linear_regression": linear_predictions})
+results_df["ridge_regression"] = ridge_predictions
+results_df["random_forest"] = randForest_predictions
+results_df["arimax"] = arimax_predictions
+results_df["xgboost"] = xgb_predictions
 
 csv_path = os.path.join(output_dir, "predictions.csv")
 results_df.to_csv(csv_path, index=False)
@@ -139,16 +233,10 @@ plt.plot(
     original_df["day"], original_df["weight"], "o-", label="Historical", color="black"
 )
 plt.plot(pred_days, linear_predictions, "x--", label="Linear Regression", color="red")
-plt.plot(
-    pred_days, arima_whitenoise_predictions, label="ARIMA White Noise", color="blue"
-)
-plt.plot(
-    pred_days, arima_randomwalk_predictions, label="ARIMA Random Walk", color="green"
-)
-plt.plot(
-    pred_days, arima_autoregressive_predictions, label="ARIMA AR(1)", color="orange"
-)
-plt.plot(pred_days, arima_suggested_predictions, label="ARIMA (5,1,0)", color="purple")
+plt.plot(pred_days, randForest_predictions, "s--", label="Random Forest", color="green")
+plt.plot(pred_days, ridge_predictions, "o--", label="Ridge Regression", color="purple")
+plt.plot(pred_days, arimax_predictions, "d--", label="ARIMAX", color="blue")
+plt.plot(pred_days, xgb_predictions, "p--", label="XGBoost", color="orange")
 plt.xlabel("Day")
 plt.ylabel("Weight")
 plt.title("Weight Forecasts for Next 28 Days")
