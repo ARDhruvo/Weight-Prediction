@@ -1,17 +1,18 @@
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge
-from statsmodels.tsa.arima.model import ARIMA
-from pmdarima import auto_arima
-from xgboost import XGBRegressor
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import warnings
 
-# Future idea: Make it modular
+from models.linReg import linear_model
+from models.randForest import random_forest_model
+from models.ridge import ridge_model
+from models.arimax import arimax_model
+from models.xgboost import xgboost_model
 
+
+warnings.filterwarnings("ignore")
 script_dir = os.path.dirname(__file__)
 input_file = os.path.join(script_dir, "data.csv")
 output_dir = os.path.join(script_dir, "predictions")
@@ -50,173 +51,43 @@ pred_days = list(range(43, 50))
 possible_cheat_days = [42, 43, 44]
 
 week = 0
+exercised = 0
+burned = 111
+fasting = 0
+classes = 0
 
 original_df = pd.read_csv(input_file)
 
 
-# Linear regression model
-
-linear_predictions = []
-
-last_actual_weight = df[df["day"] == 41]["weight"].values[0]
-lag1 = last_actual_weight
-
-
-model_lr = LinearRegression()
-model_lr.fit(x, y)
-
-
-for i, day in enumerate(pred_days):
-    exercised = 0
-    burned = 80
-    cheat = 1 if (day in possible_cheat_days) else 0
-    fasting = 0
-    classes = 0
-    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
-    pred_weight = model_lr.predict(features)[0]
-    linear_predictions.append(pred_weight)
-    lag1 = pred_weight
-    week += 1
-
-week = 0
-
-print("Linear Regression Predictions:")
-for i, pred in enumerate(linear_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-
-# Random Forest model
-
-randForest_predictions = []
-
-last_actual_weight = df[df["day"] == 41]["weight"].values[0]
-lag1 = last_actual_weight
-
-model_rf = RandomForestRegressor(
-    n_estimators=100, max_depth=20, min_samples_leaf=5, random_state=42
-)
-model_rf.fit(x, y)
-
-for i, day in enumerate(pred_days):
-    exercised = 0
-    burned = 80
-    cheat = 1 if (day in possible_cheat_days) else 0
-    fasting = 0
-    classes = 0
-    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
-    pred_weight = model_rf.predict(features)[0]
-    randForest_predictions.append(pred_weight)
-    lag1 = pred_weight
-    week += 1
-
-week = 0
-
-print("Random Forest Predictions:")
-for i, pred in enumerate(randForest_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-
-# Ridge Regression model
-
-ridge_predictions = []
-
-last_actual_weight = df[df["day"] == 41]["weight"].values[0]
-lag1 = last_actual_weight
-
-model_ridge = Ridge(alpha=1.0)
-model_ridge.fit(x, y)
-
-for i, day in enumerate(pred_days):
-    exercised = 0
-    burned = 80
-    cheat = 1 if (day in possible_cheat_days) else 0
-    fasting = 0
-    classes = 0
-    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
-    pred_weight = model_ridge.predict(features)[0]
-    ridge_predictions.append(pred_weight)
-    lag1 = pred_weight
-    week += 1
-
-week = 0
-
-print("Ridge Regression Predictions:")
-for i, pred in enumerate(ridge_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-# ARIMAX model
-
-arimax_predictions = []
-
-last_actual_weight = df[df["day"] == 41]["weight"].values[0]
-lag1 = last_actual_weight
-
-endog = df["weight"].values
-exog = df[["day", "exercised", "cheat", "fasting", "week", "burned", "classes"]].values
-
-moodel_arimax = auto_arima(
-    endog,
-    exogenous=exog,
-    start_p=0,
-    max_p=3,
-    start_q=0,
-    max_q=3,
-    d=None,
-    max_d=2,
-    seasonal=False,
-    stepwise=True,
-    trace=True,
-    suppress_warnings=True,
-    error_action="ignore",
+linear_predictions = linear_model(
+    x, y, df, pred_days, exercised, burned, possible_cheat_days, fasting, classes, week
 )
 
-for i, day in enumerate(pred_days):
-    exercised = 0
-    burned = 80
-    cheat = 1 if (day in possible_cheat_days) else 0
-    fasting = 0
-    classes = 0
-    features = np.array([[day, exercised, cheat, fasting, week, burned, classes]])
-    pred_weight = moodel_arimax.predict(n_periods=1, exogenous=features)[0]
-    arimax_predictions.append(pred_weight)
-    week += 1
-
-week = 0
-
-print("ARIMAX Predictions:")
-for i, pred in enumerate(arimax_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-# XGBoost model
-
-xgb_predictions = []
-
-last_actual_weight = df[df["day"] == 41]["weight"].values[0]
-lag1 = last_actual_weight
-
-model_xgb = XGBRegressor(
-    n_estimators=100, max_depth=5, learning_rate=0.1, random_state=42
+randForest_predictions = random_forest_model(
+    x, y, df, pred_days, exercised, burned, possible_cheat_days, fasting, classes, week
 )
-model_xgb.fit(x, y)
+
+ridge_predictions = ridge_model(
+    x, y, df, pred_days, exercised, burned, possible_cheat_days, fasting, classes, week
+)
+
+arimax_predictions = arimax_model(
+    x, y, df, pred_days, exercised, burned, possible_cheat_days, fasting, classes, week
+)
+
+xgb_predictions = xgboost_model(
+    x, y, df, pred_days, exercised, burned, possible_cheat_days, fasting, classes, week
+)
+
+# Displaying and Saving Results
+
+print("\nSummary of Predictions:")
 for i, day in enumerate(pred_days):
-    exercised = 0
-    burned = 80
-    cheat = 1 if (day in possible_cheat_days) else 0
-    fasting = 0
-    classes = 0
-    features = np.array([[day, exercised, cheat, fasting, week, burned, classes, lag1]])
-    pred_weight = model_xgb.predict(features)[0]
-    xgb_predictions.append(pred_weight)
-    lag1 = pred_weight
-    week += 1
-
-week = 0
-
-print("XGBoost Predictions:")
-for i, pred in enumerate(xgb_predictions):
-    print(f"Day {pred_days[i]}: {pred:.2f}")
-
-# Saving Results
+    print(
+        f"Day {day}: Linear={linear_predictions[i]:.2f}, Ridge={ridge_predictions[i]:.2f}, "
+        f"Random Forest={randForest_predictions[i]:.2f}, ARIMAX={arimax_predictions[i]:.2f}, "
+        f"XGBoost={xgb_predictions[i]:.2f}"
+    )
 
 results_df = pd.DataFrame({"day": pred_days, "linear_regression": linear_predictions})
 results_df["ridge_regression"] = ridge_predictions
