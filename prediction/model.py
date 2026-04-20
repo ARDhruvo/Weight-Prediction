@@ -14,7 +14,7 @@ from models.xgboost import xgboost_model
 
 warnings.filterwarnings("ignore")
 script_dir = os.path.dirname(__file__)
-input_file = os.path.join(script_dir, "data.csv")
+input_file = os.path.join(script_dir, "..", "data.csv")
 output_dir = os.path.join(script_dir, "predictions")
 os.makedirs(output_dir, exist_ok=True)
 df = pd.read_csv(input_file)
